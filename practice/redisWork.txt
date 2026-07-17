@@ -1,0 +1,159 @@
+To check and inspect information inside Redis for your students, you need graphical or command-line tools that let them "see" inside the memory bank.
+
+Here are the three best ways to show students exactly what is happening inside Redis, ranked from the easiest visual tool to the most powerful terminal command.
+
+---
+
+## 🗺️ Method 1: The Visual Way (Redis Insight) — *Best for Beginners*
+
+If your students are visual learners, the best tool is **Redis Insight**. It is a official, free desktop application that acts like a browser for your Redis database.
+
+### How to use it for teaching:
+
+1. Download and install **Redis Insight** on your computer.
+2. Click **Add Database Connection**.
+3. Set the Host to `localhost` and the Port to `6379` (matching your Docker setup).
+4. **What to show them:** You will see a clean, interactive list of your keys (like `products:all` or `products:categories`). You can click on any key to reveal the JSON string data stored inside it in real-time.
+
+---
+
+## 🖥️ Method 2: The Command Line (`KEYS` & `GET`) — *Best for Quick Checks*
+
+If you are already inside the terminal using `redis-cli`, you can use commands to list and read data.
+
+> ⚠️ **Teaching Note:** Advise your students that while `KEYS *` is perfect for learning on a laptop, they should *never* run it on a massive production server because it can cause a temporary slowdown while Redis searches everything.
+
+### Step 1: List all existing keys
+
+To see a list of every single "sticky note" currently saved in Redis, type:
+
+```bash
+KEYS *
+
+```
+
+* **Output example:**
+```text
+1) "products:categories"
+2) "products:all:search=:cat="
+
+```
+
+
+
+### Step 2: Read the value of a specific key
+
+Once you see the key name you want to inspect, use `GET`:
+
+```bash
+GET "products:categories"
+
+```
+
+* **Output example:**
+```json
+"[\"All\",\"Electronics\",\"Clothing\"]"
+
+```
+
+
+
+---
+
+## 🕵️‍♂️ Method 3: The Live Spy Mode (`MONITOR`) — *The "Wow" Factor*
+
+Ah! That error happened because you typed `MONITOR` directly into your regular Windows PowerShell terminal. PowerShell doesn't know what Redis is, so it panicked.
+
+To use the `MONITOR` command, you have to be **inside** the Redis container first.
+
+Here is how to fix it step-by-step:
+
+---
+
+### Step 1: Jump inside your running Docker Redis container
+
+Run this command in your PowerShell to open the gate to your Redis server (replace `local_ecommerce_redis` with your container name from your docker-compose file):
+
+```powershell
+docker exec -it local_ecommerce_redis redis-cli
+
+```
+
+Your terminal prompt should change and look like this:
+
+```text
+127.0.0.1:6379>
+
+```
+
+---
+
+### Step 2: Now, run the MONITOR command
+
+Now that you are safely inside the Redis world, type the command:
+
+```text
+MONITOR
+
+```
+
+It will say `OK`, pause, and wait. Now, whenever you send requests from your HTTPie app or your Express application, you will see the cache actions stream across this window live! (To stop monitoring, just press `Ctrl + C`).
+
+3. Now, go to your application (or your HTTPie app) and trigger an action—like fetching all products or creating a new product.
+4. Switch back to the terminal. Your students will see the exact command your Express backend just sent to Redis scroll past instantly!
+
+* **What it looks like live:**
+```text
+1718656157.104321 [0 172.18.0.1:54322] "GET" "products:categories"
+1718656162.455102 [0 172.18.0.1:54322] "SET" "products:single:65c8f1a2" "..." "EX" "3600"
+
+```
+
+
+
+Using `MONITOR` bridges the gap perfectly between writing backend code and understanding exactly when your application is hitting the cache.
+
+
+
+Step 1: Download and Install Redis Insight
+Think of Redis Insight as a web browser, but instead of viewing websites, it lets you view your Redis data using a beautiful, visual control panel.
+
+Go to your web browser and search for "Redis Insight download" (or head to the official Redis website).
+
+Download the installer compatible with your computer (Windows, Mac, or Linux).
+
+Open the downloaded file and follow the standard installation prompts (clicking "Next" or dragging it to your Applications folder).
+
+Launch the application once it finishes installing.
+
+🔌 Step 2: Connect it to your Docker Redis Instance
+When you open Redis Insight for the first time, it will look like an empty dashboard. We need to tell it how to talk to the Redis server running inside your Docker container.
+
+Look for a prominent button that says "Add Database Connection" (usually in the top left or center) and click it.
+
+A form will pop up asking for connection details. Fill it out exactly like this:
+
+Host: Type localhost (This tells Redis Insight to look inside your own computer).
+
+Port: Type 6379 (This is the default gate number we opened up in your docker-compose.yml file).
+
+Name (Optional): Give it a friendly nickname like Local E-Commerce Cache.
+
+Leave the username and password blank (since your local development setup doesn't use passwords yet).
+
+Click "Connect" or "Add Database" at the bottom.
+
+🕵️‍♂️ Step 3: Inspecting your Keys in Real-Time
+Now for the fun part! Once connected, click on your newly added database connection from the list. You will be taken to the main workspace browser.
+
+1. Finding your Caches
+On the left-hand side or main screen, you will see a list of your Keys. These are the "sticky note names" your Express app created, such as:
+
+products:categories
+
+products:all:search=:cat=
+
+2. Reading the Hidden Data
+Click on any of those key names. A side panel or window will slide open on the right side of the screen. Inside, you will see the exact JSON string data that your Express application saved!
+
+Instead of guessing what is inside Redis, you and your students can literally watch the arrays of products and categories sit inside the RAM memory in real-time. If you refresh your HTTPie app or add a product, you can hit the "Refresh" button in Redis Insight and watch the keys vanish and reappear instantly!

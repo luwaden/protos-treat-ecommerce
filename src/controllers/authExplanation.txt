@@ -1,0 +1,18 @@
+Registration (POST /api/auth/register)The Goal: The user is saying, "I want to join your app. Here is my information."How to explain it:
+
+
+When a beginner looks at registration, they often think it’s just saving a row in a database. 
+
+
+But in a modern backend, we are doing two things at once: creating the account and logging them in immediately so they don't have to type their password twice.
+
+-The Step-by-Step Flow:The Check: The server looks at the database (userService.findByEmail). Does this email already exist? If yes, throw a 409 Conflict error. We can't have duplicate accounts.
+-The Creation: We save the user (userService.create). Behind the scenes, bcrypt is turning their password ("password123") into a scrambled hash ("$2a$10$xyz..."). Never store plain text passwords.The ID Badge: We create a "Payload" (a small package of non-secret data containing the user's ID, email, and role).
+
+The Hand-off: We pass this payload to our issueTokenPair helper. This helper generates the fast Access Token, secures the long-term Refresh Token in an httpOnly cookie, and hands the Access Token back to the user.
+
+2. Login (POST /api/auth/login)The Goal: The user is saying, "I'm already a member. Here is my proof. Let me in."How to explain it:Login is essentially a strict series of security checkpoints. If the user fails any checkpoint, they are turned away.The Step-by-Step Flow:Checkpoint 1 (Identity): Does this email exist in our database? If no, stop.Checkpoint 2 (Lockout Check): Did this person try and fail to log in 10 times in the last few minutes? (userService.isLocked). If yes, reject them. This stops bots from guessing passwords millions of times a second (Brute-force attacks).Checkpoint 3 (Verification): We use bcrypt to compare the password they just typed with the scrambled hash in our database. If it doesn't match, we add a "strike" to their failed login attempts and reject them.Success: If they pass all checkpoints, we reset their failed login attempts back to zero. Just like in registration, we build their Payload, generate their two tokens (issueTokenPair), and let them in.
+
+3. The Refresh Token Flow (POST /api/auth/refresh)The Goal: The user's fast Access Token expired after 15 minutes. They need a new one, but asking them to type their password every 15 minutes is terrible user experience.How to explain it:This is the hardest concept for beginners. Explain it as a trade-in system. You cannot use an expired Access Token. You must hand the server your secure Refresh Token, and the server will trade you a brand new pair of tokens.The Step-by-Step Flow:The Retrieval: The server automatically looks inside the incoming request's cookies to find the Refresh Token. (Because it is httpOnly, the browser attaches it automatically; the frontend code doesn't even touch it).The Forgery Check: The server verifies the token's digital signature (verifyRefreshToken). Was this token created by us, or did a hacker forge it?The Ledger Check: The server reads the token's unique ID (tokenId) and checks the Redis database (tokenStore.exists). Is this specific token still valid, or was it already used/logged out? 4. The Rotation (Crucial Security Step): If everything is valid, we immediately destroy the old token in Redis (tokenStore.revoke). A refresh token can only be used exactly once.The New Issue: We generate a brand new Access Token and a brand new Refresh Token, and send them back. The cycle starts over.
+
+

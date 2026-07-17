@@ -1,0 +1,150 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mongodb"
+  url      = env("DATABASE_URL")
+}
+
+// -----------------------------------------------------------------------------
+// NEW: This enum did not exist before — the original User model referenced
+// `UserRole` but it was only defined as a TypeScript enum, never in Prisma.
+// Prisma needs its OWN definition so it can generate a matching TS type
+// (`import { UserRole } from "@prisma/client"`).
+// -----------------------------------------------------------------------------
+enum UserRole {
+  Customer
+  Admin
+}
+
+model User {
+  id            String    @id @default(auto()) @map("_id") @db.ObjectId
+  name          String
+  email         String    @unique
+  password      String
+  role          UserRole  @default(Customer)
+  isBanned      Boolean   @default(false)
+  loginAttempts Int       @default(0)
+  lockUntil     DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  // The "many" side of the relation below — lets an admin query
+  // `prisma.user.findUnique({ where: { id }, include: { orders: true } })`
+  // to see one customer's whole order history in a single query.
+  orders        Order[]
+
+  @@index([createdAt])
+  @@map("users")
+}
+
+
+
+model PasswordReset {
+  id         String   @id @default(auto()) @map("_id") @db.ObjectId
+  email      String
+  otpHash    String
+  resetToken String?
+  used       Boolean  @default(false)
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+
+  @@index([email])
+  @@index([resetToken])
+  @@map("password_resets")
+}
+
+
+enum PaymentStatus {
+  Pending
+  Paid
+  Failed
+  Refunded
+}
+
+enum OrderStatus {
+  Processing
+  Shipped
+  Delivered
+  Cancelled
+}
+
+// -----------------------------------------------------------------------------
+// Order used to live in a separate Mongoose model (src/models/order.model.ts),
+// talking to MongoDB through a totally different driver than everything else
+// in this project. That meant two ODMs, two connections, two ways of writing
+// a query — for a learning project that's a confusing amount of duplication.
+// It's now a normal Prisma model, exactly like User and Product, so there is
+// ONE way to talk to the database everywhere in this codebase.
+// -----------------------------------------------------------------------------
+model Order {
+  id               String        @id @default(auto()) @map("_id") @db.ObjectId
+  userId           String        @db.ObjectId
+  // The relation field — this is what lets the admin dashboard fetch an
+  // order together with the customer who placed it in ONE query, instead
+  // of a separate lookup per order:
+  //   prisma.order.findMany({ select: { ..., user: { select: {...} } } })
+  user             User          @relation(fields: [userId], references: [id])
+  items            OrderItem[]
+  totalAmount      Float
+  paymentReference String        @unique
+  paymentStatus    PaymentStatus @default(Pending)
+  orderStatus      OrderStatus   @default(Processing)
+  shippingAddress  ShippingAddress?
+  paidAt           DateTime?
+  cancelledAt      DateTime?
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+
+  @@index([userId, createdAt])
+  @@index([paymentStatus, paidAt])
+  @@index([orderStatus])
+  @@map("orders")
+}
+
+// Prisma (with MongoDB) supports embedded/composite types for nested objects
+// that don't need their own collection — perfect for "line items on an order".
+type OrderItem {
+  productId String
+  name      String
+  price     Float
+  quantity  Int
+  image     String
+}
+
+type ShippingAddress {
+  firstName String
+  lastName  String
+  email     String
+  phone     String
+  address   String
+  city      String
+}
+
+model Product {
+  id            String   @id @default(auto()) @map("_id") @db.ObjectId
+  name          String
+  description   String
+  price         Float
+  category      String
+  image         String
+  // The Cloudinary "public_id" for `image` above — NOT shown in the UI.
+  // We need this to tell Cloudinary exactly which file to delete when a
+  // product's image is replaced or the product itself is deleted. Without
+  // it, old images would pile up in Cloudinary forever ("orphaned assets").
+  imagePublicId String?
+  rating        Float    @default(0.0)
+  inStock       Boolean  @default(true)
+  stock         Int      @default(0)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([category])
+  @@index([price])
+  @@index([createdAt])
+}
+

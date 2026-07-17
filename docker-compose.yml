@@ -1,0 +1,74 @@
+version: "3.8"
+
+# -----------------------------------------------------------------------------
+# Protos Treat — local dev stack (MongoDB + Redis + the API, all via Docker)
+# -----------------------------------------------------------------------------
+# Start everything:        docker compose up -d
+# Watch API logs:          docker compose logs -f api
+# Seed products + admin:   docker compose exec api npm run seed
+# Stop everything:         docker compose down
+# Stop AND wipe the data:  docker compose down -v
+#
+# Why MongoDB runs as a "replica set" (rs0) even with just one node: Prisma's
+# MongoDB connector needs replica-set features to work at all — this isn't
+# optional, even for local dev. `mongo-rs-init` runs `rs.initiate()` once,
+# the first time you start the stack, and then exits.
+# -----------------------------------------------------------------------------
+services:
+  mongo-db:
+    image: mongo:6.0
+    container_name: protos_treat_mongo
+    ports:
+      - "27017:27017"
+    command: ["--replSet", "rs0", "--bind_ip_all"]
+    volumes:
+      - mongo_ecommerce_data:/data/db
+
+  mongo-rs-init:
+    image: mongo:6.0
+    depends_on:
+      - mongo-db
+    restart: "no"
+    command: >
+      mongosh --host mongo-db:27017 --eval '
+        try {
+          rs.status().ok
+        } catch (e) {
+          rs.initiate({
+            _id: "rs0",
+            members: [{ _id: 0, host: "mongo-db:27017" }]
+          })
+        }
+      '
+
+  redis:
+    image: redis:7.2-alpine
+    container_name: protos_treat_redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_ecommerce_data:/data
+    command: redis-server --appendonly yes
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: protos_treat_api
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      # Inside Docker, containers reach each other by SERVICE NAME, not
+      # "localhost" — these two lines override whatever your .env says.
+      DATABASE_URL: "mongodb://mongo-db:27017/protos_treat?replicaSet=rs0"
+      REDIS_URL: "redis://redis:6379"
+    ports:
+      - "5001:5001"
+    depends_on:
+      - mongo-db
+      - mongo-rs-init
+      - redis
+
+volumes:
+  mongo_ecommerce_data:
+  redis_ecommerce_data:
